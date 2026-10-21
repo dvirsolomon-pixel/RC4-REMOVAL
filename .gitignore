@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+secrets/
+credentials*
+*token*
+# Local logs / reports that may contain internal AD data
+*.log
+*.csv
