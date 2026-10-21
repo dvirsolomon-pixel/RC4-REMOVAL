@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Stocktake: shadow AI inventory for Windows endpoints</title>
+<meta name="description" content="Free, open-source PowerShell agent that shows what AI is running on your company's Windows machines: AI apps, browser extensions, coding agents, MCP servers, risky permissions, reachable secrets and exposed local LLMs. Offline HTML report. Never reads prompts.">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b6b5d'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f7f8f6;
+    --surface: #ffffff;
+    --surface-2: #eef1ee;
+    --text: #15201d;
+    --muted: #4c5a56;
+    --border: #d5dcd8;
+    --accent: #0b6b5d;
+    --accent-strong: #08544a;
+    --accent-soft: #dcefe9;
+    --on-accent: #ffffff;
+    --warn: #8a4b00;
+    --warn-soft: #fbecd9;
+    --danger: #a3262a;
+    --code-bg: #10201c;
+    --code-text: #d9f2ea;
+    --shadow: 0 1px 2px rgba(16, 32, 28, .06), 0 8px 24px rgba(16, 32, 28, .06);
+    --radius: 14px;
+    --maxw: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1513;
+      --surface: #14201d;
+      --surface-2: #1a2925;
+      --text: #e6eeeb;
+      --muted: #a3b3ae;
+      --border: #2a3b36;
+      --accent: #4fd1b5;
+      --accent-strong: #7fe0ca;
+      --accent-soft: #163a33;
+      --on-accent: #06201a;
+      --warn: #f3b664;
+      --warn-soft: #3a2a12;
+      --danger: #ff8a8e;
+      --code-bg: #08110f;
+      --code-text: #c9efe3;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:hover { color: var(--accent-strong); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace; }
+  code { font-size: .92em; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; overflow-wrap: anywhere; }
+  .skip {
+    position: absolute; left: 16px; top: -60px; z-index: 10;
+    background: var(--accent); color: var(--on-accent); padding: 10px 14px; border-radius: 8px; font-weight: 600;
+  }
+  .skip:focus { top: 12px; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 24px; } }
+
+  header.site {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header.site .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; font-size: 1.05rem; }
+  .brand svg { flex: none; }
+  nav.top ul { list-style: none; display: flex; gap: 18px; margin: 0; padding: 0; }
+  nav.top a { color: var(--muted); text-decoration: none; font-size: .95rem; }
+  nav.top a:hover { color: var(--text); text-decoration: underline; }
+  @media (max-width: 719px) { nav.top .hide-sm { display: none; } }
+
+  section { padding: 56px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  h1, h2, h3 { line-height: 1.2; margin: 0 0 .5em; }
+  h1 { font-size: clamp(2rem, 5.2vw, 3.2rem); letter-spacing: -.02em; }
+  h2 { font-size: clamp(1.5rem, 3.4vw, 2.1rem); letter-spacing: -.01em; }
+  h3 { font-size: 1.1rem; }
+  .eyebrow { display: inline-block; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  .lead { font-size: 1.15rem; color: var(--muted); max-width: 62ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: .9rem; }
+
+  .hero { padding: 64px 0 56px; }
+  .hero-grid { display: grid; gap: 36px; align-items: center; }
+  @media (min-width: 900px) { .hero-grid { grid-template-columns: 1.1fr .9fr; } }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 26px 0 14px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 46px;
+    padding: 11px 18px; border-radius: 10px; font-weight: 650; text-decoration: none;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); color: var(--text); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); color: var(--on-accent); }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
+  .pills li { font-size: .85rem; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--text); }
+
+  /* sample report mock */
+  .report {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .report-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: .82rem; color: var(--muted); }
+  .report-bar strong { color: var(--text); font-weight: 650; }
+  .report table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .report caption { text-align: left; padding: 12px 14px 4px; font-weight: 650; }
+  .report th, .report td { text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .report th { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+  .report tr:last-child td { border-bottom: 0; }
+  .sev { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .sev.high { background: var(--warn-soft); color: var(--danger); }
+  .sev.med { background: var(--warn-soft); color: var(--warn); }
+  .sev.info { background: var(--accent-soft); color: var(--text); }
+  .report-note { padding: 10px 14px; font-size: .78rem; color: var(--muted); border-top: 1px solid var(--border); }
+
+  .grid { display: grid; gap: 16px; }
+  @media (min-width: 640px) { .grid.two { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 900px) { .grid.three { grid-template-columns: repeat(3, 1fr); } .grid.four { grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width: 640px) and (max-width: 899px) { .grid.three, .grid.four { grid-template-columns: repeat(2, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card h3 { display: flex; align-items: center; gap: 10px; }
+  .card p { margin: 0; color: var(--muted); }
+  .icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+
+  .incident { display: flex; flex-direction: column; gap: 8px; }
+  .incident .date { font-size: .8rem; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .incident .src { margin-top: auto; font-size: .9rem; padding-top: 6px; }
+
+  .privacy { display: grid; gap: 20px; }
+  @media (min-width: 900px) { .privacy { grid-template-columns: 1fr 1fr; } }
+  .list-check, .list-x { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .list-check li, .list-x li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .list-check li::before, .list-x li::before {
+    content: ""; width: 22px; height: 22px; border-radius: 6px; margin-top: 2px;
+    background-repeat: no-repeat; background-position: center; background-size: 14px;
+  }
+  .list-check li::before { background-color: var(--accent-soft); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3 3 7-7' fill='none' stroke='%230b8f7a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+  .list-x li::before { background-color: var(--warn-soft); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8M12 4l-8 8' fill='none' stroke='%23c2410c' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E"); }
+
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 16px; }
+  @media (min-width: 900px) { ol.steps { grid-template-columns: repeat(3, 1fr); } }
+  ol.steps > li { counter-increment: s; position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 20px 20px 66px; }
+  ol.steps > li::before {
+    content: counter(s); position: absolute; left: 20px; top: 20px; width: 32px; height: 32px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; background: var(--accent); color: var(--on-accent);
+  }
+  ol.steps p { margin: 0; color: var(--muted); }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); margin-left: 6px; vertical-align: middle; }
+  pre {
+    margin: 20px 0 0; background: var(--code-bg); color: var(--code-text); padding: 16px; border-radius: 12px;
+    overflow-x: auto; font-size: .88rem; line-height: 1.55;
+  }
+  pre code { background: none; padding: 0; color: inherit; overflow-wrap: normal; }
+  pre .c { color: #8fb3a8; }
+
+  .plans { display: grid; gap: 16px; }
+  @media (min-width: 900px) { .plans { grid-template-columns: repeat(3, 1fr); } }
+  .plan { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+  .plan.featured { border: 2px solid var(--accent); }
+  .plan .price { font-size: 1.6rem; font-weight: 750; }
+  .plan ul { margin: 0; padding-left: 1.1em; color: var(--muted); display: grid; gap: 6px; }
+  .plan .status { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  .plan .status.later { color: var(--warn); }
+
+  .cta-final { text-align: center; }
+  .cta-final .lead { margin-left: auto; margin-right: auto; }
+  .cta-final .cta-row { justify-content: center; }
+
+  footer.site { border-top: 1px solid var(--border); padding: 28px 0 40px; color: var(--muted); font-size: .9rem; }
+  footer.site .wrap { display: flex; flex-wrap: wrap; gap: 10px 24px; justify-content: space-between; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, nav.top a { transition: background-color .15s, border-color .15s, color .15s; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="AI Stocktake home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="currentColor" style="color:var(--accent)"/><path d="M9 10h14M9 16h14M9 22h9" stroke="var(--on-accent)" stroke-width="2.6" stroke-linecap="round"/></svg>
+      AI Stocktake
+    </a>
+    <nav class="top" aria-label="Primary">
+      <ul>
+        <li class="hide-sm"><a href="#finds">What it finds</a></li>
+        <li class="hide-sm"><a href="#privacy">Privacy</a></li>
+        <li class="hide-sm"><a href="#plans">Free vs Pro</a></li>
+        <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">GitHub</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- HERO -->
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Free &amp; open source · Windows</span>
+        <h1 id="hero-title">Take stock of the AI on every Windows machine.</h1>
+        <p class="lead">AI Stocktake is a free PowerShell agent that shows what AI is running across your fleet: AI apps, browser extensions, coding agents, MCP servers, risky agent permissions, secrets agents can reach, and exposed local LLMs. You get one offline HTML report. It never reads prompts.</p>
+        <div class="cta-row">
+          <a class="btn primary" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">
+            <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.23 1.88.87 2.34.67.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            Get it on GitHub
+          </a>
+          <a class="btn" href="#how">How it works</a>
+        </div>
+        <ul class="pills" aria-label="Highlights">
+          <li>Runs offline</li>
+          <li>Intune &amp; GPO friendly</li>
+          <li>No E5 required</li>
+          <li>Secrets hashed, never collected</li>
+        </ul>
+      </div>
+
+      <figure class="report" aria-labelledby="sample-cap" style="margin:0">
+        <div class="report-bar"><span><strong>ai-stocktake-report.html</strong></span><span>Illustrative sample</span></div>
+        <table>
+          <caption id="sample-cap">Findings on one workstation</caption>
+          <thead><tr><th scope="col">Finding</th><th scope="col">Severity</th></tr></thead>
+          <tbody>
+            <tr><td>Coding agent set to auto-approve every action (<code>bypassPermissions</code>)</td><td><span class="sev high">High</span></td></tr>
+            <tr><td>API key in plaintext in an MCP config. Type: GitHub token, fingerprint <code>3f9c…a1</code></td><td><span class="sev high">High</span></td></tr>
+            <tr><td>MCP server launched via <code>npx</code> with an unpinned version</td><td><span class="sev med">Medium</span></td></tr>
+            <tr><td>Local LLM listening on <code>0.0.0.0:11434</code></td><td><span class="sev med">Medium</span></td></tr>
+            <tr><td>AI desktop app installed per-user in AppData</td><td><span class="sev info">Info</span></td></tr>
+          </tbody>
+        </table>
+        <figcaption class="report-note">Mock-up showing the kinds of findings in a report. It is not data from a real company.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section aria-labelledby="problem-title">
+    <div class="wrap">
+      <span class="eyebrow">The problem</span>
+      <h2 id="problem-title">AI agents now have shell access, tokens and your files, and you can't see them.</h2>
+      <p class="lead">Coding agents and MCP servers install per-user, read config files full of API keys, and can run commands. Network tools see traffic to chatgpt.com. They don't see what runs locally on the endpoint. These incidents are public:</p>
+
+      <div class="grid three" style="margin-top:28px">
+        <article class="card incident">
+          <span class="date">September 2025</span>
+          <h3>A malicious MCP server on npm</h3>
+          <p>One version of the <code>postmark-mcp</code> package added a hidden BCC, so every email sent through the AI assistant was copied to an outside address.</p>
+          <a class="src" href="https://snyk.io/blog/malicious-mcp-server-on-npm-postmark-mcp-harvests-emails/">Read Snyk's analysis</a>
+        </article>
+        <article class="card incident">
+          <span class="date">August 2025</span>
+          <h3>Malware that used local AI CLIs to steal secrets</h3>
+          <p>In the Nx "s1ngularity" supply-chain attack, the malicious packages looked for locally installed AI coding CLIs such as Claude, Gemini and Amazon Q, and prompted them to search developer machines for credentials.</p>
+          <a class="src" href="https://blog.gitguardian.com/the-nx-s1ngularity-attack-inside-the-credential-leak/">Read GitGuardian's analysis</a>
+        </article>
+        <article class="card incident">
+          <span class="date">2026 report</span>
+          <h3>Secrets sitting in MCP config files</h3>
+          <p>GitGuardian's State of Secrets Sprawl 2026 reports 24,008 unique secrets found in MCP configuration files on public GitHub. The same files sit on your users' laptops.</p>
+          <a class="src" href="https://gitguardian.com/state-of-secrets-sprawl-report-2026">Read the GitGuardian report</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT IT FINDS -->
+  <section id="finds" aria-labelledby="finds-title">
+    <div class="wrap">
+      <span class="eyebrow">What it finds</span>
+      <h2 id="finds-title">One scan, seven layers of AI on the endpoint.</h2>
+      <p class="lead">Detection rules live in an open, community-maintained catalog, so new tools and changed config paths can be added with a pull request.</p>
+
+      <div class="grid four" style="margin-top:28px">
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8"/></svg></span>AI apps</h3>
+          <p>Desktop AI apps and local runtimes, including per-user AppData installs that standard inventory often misses.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></span>Browser extensions</h3>
+          <p>AI extensions in Chrome, Edge, Brave and Firefox, with their requested permissions.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg></span>Coding agents</h3>
+          <p>Claude Code, Cursor, GitHub Copilot, Gemini CLI, Windsurf and more, wherever they're installed.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7.5l3 8M16 7.5l-3 8"/></svg></span>MCP servers</h3>
+          <p>Every configured MCP server: the command it runs, its package source, and whether the version is pinned.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M12 9v4M12 16h.01"/></svg></span>Risky permissions</h3>
+          <p>Auto-approve modes, unrestricted shell access, and agents running with local admin rights.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg></span>Reachable secrets</h3>
+          <p>API keys and tokens in agent configs and env files. It reports the type and a one-way fingerprint, never the value.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/></svg></span>Exposed local LLMs</h3>
+          <p>Ollama and LM Studio listening on all interfaces instead of localhost only.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>Your tool next</h3>
+          <p>Missing something? Add it to the open catalog with a short YAML file. <a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/issues">Suggest a tool</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRIVACY -->
+  <section id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap">
+      <span class="eyebrow">Privacy-first</span>
+      <h2 id="privacy-title">An inventory, not a surveillance tool.</h2>
+      <p class="lead">AI Stocktake reads installed software and configuration. The code is open, so your security team and works council can check exactly what it collects.</p>
+      <div class="privacy" style="margin-top:28px">
+        <div class="card">
+          <h3>What it collects</h3>
+          <ul class="list-check">
+            <li>Names and versions of AI apps, extensions and agents</li>
+            <li>MCP server definitions: command, package and pinning</li>
+            <li>Risky settings, such as auto-approve or shell access</li>
+            <li>For secrets: the type (for example "GitHub token") and a one-way fingerprint, so you can tell when the same key appears on several machines</li>
+            <li>Listening ports of local LLM runtimes</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>What it never collects</h3>
+          <ul class="list-x">
+            <li>Prompts, chat history or AI responses</li>
+            <li>Secret values in plaintext</li>
+            <li>File contents, browsing history, keystrokes or clipboard</li>
+            <li>Anything sent anywhere by default. The Community edition runs fully offline</li>
+            <li>Usernames, if you turn on privacy mode (only the device name is kept)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <span class="eyebrow">How it works</span>
+      <h2 id="how-title">Run it. Read the report. Then scale it.</h2>
+      <ol class="steps" style="margin-top:28px">
+        <li>
+          <h3>Run</h3>
+          <p>Run the PowerShell module on one machine, or deploy it to the fleet with an Intune Remediation, a platform script, GPO or a scheduled task. It runs in user mode, with no driver and no installer.</p>
+        </li>
+        <li>
+          <h3>Report</h3>
+          <p>Get a self-contained HTML report (plus JSON) with findings ranked by severity and a short note on how to fix each one. It works without an internet connection.</p>
+        </li>
+        <li>
+          <h3>Fleet dashboard <span class="tag">Coming soon</span></h3>
+          <p>Optionally send results to a hosted dashboard: every device in one view, history, and alerts when something new appears.</p>
+        </li>
+      </ol>
+<pre aria-label="Example PowerShell commands"><code><span class="c"># Download the module from the latest GitHub Release, then:</span>
+Import-Module .\AIStocktake.psd1
+Invoke-AIStocktake -OutputPath .\ai-stocktake-report.html</code></pre>
+      <p class="muted small" style="margin-top:10px">Command names are from the planned v0.1 release. Check the README on GitHub for the current instructions.</p>
+    </div>
+  </section>
+
+  <!-- PLANS -->
+  <section id="plans" aria-labelledby="plans-title">
+    <div class="wrap">
+      <span class="eyebrow">Free vs planned Pro</span>
+      <h2 id="plans-title">The scanner is free and open source, for good.</h2>
+      <p class="lead">Paid features are only planned. There is nothing to buy today, and no payment details are collected.</p>
+      <div class="plans" style="margin-top:28px">
+        <div class="plan featured">
+          <span class="status">Available</span>
+          <h3>Community</h3>
+          <div class="price">Free</div>
+          <ul>
+            <li>Open-source PowerShell agent</li>
+            <li>All seven detection layers</li>
+            <li>Offline HTML + JSON report</li>
+            <li>Intune &amp; GPO deployment guides</li>
+            <li>Community-maintained catalog</li>
+          </ul>
+        </div>
+        <div class="plan">
+          <span class="status later">Coming soon</span>
+          <h3>Cloud (free tier)</h3>
+          <div class="price">Free</div>
+          <ul>
+            <li>Fleet dashboard for small fleets</li>
+            <li>All devices in one view</li>
+            <li>Scan history</li>
+          </ul>
+        </div>
+        <div class="plan">
+          <span class="status later">Planned</span>
+          <h3>Pro</h3>
+          <div class="price">Per device</div>
+          <ul>
+            <li>Policies and allowlists for MCP servers</li>
+            <li>Alerts when something new appears</li>
+            <li>Compliance-ready inventory reports</li>
+            <li>Multi-tenant view for MSPs</li>
+          </ul>
+          <p class="small muted" style="margin:0">Pricing has not been set yet.</p>
+        </div>
+      </div>
+      <p class="muted small" style="margin-top:16px">Want the fleet dashboard? Tell us your fleet size in GitHub Discussions, and watch Releases on the repository to hear when it's ready.</p>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="cta-final" aria-labelledby="cta-title">
+    <div class="wrap">
+      <h2 id="cta-title">Find out what AI is already on your machines.</h2>
+      <p class="lead">Star the repository to follow along, watch Releases for new versions, and open an issue for any tool we should detect.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">View on GitHub</a>
+        <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/issues">Suggest a tool</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>AI Stocktake: open-source AI inventory for Windows endpoints.</span>
+    <span>Maintained on GitHub by <a href="https://github.com/dvirsolomon-pixel">@dvirsolomon-pixel</a>. No cookies, no trackers.</span>
+  </div>
+</footer>
+</body>
+</html>
