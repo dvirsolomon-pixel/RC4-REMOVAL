@@ -1,20 +1,47 @@
-# Secrets — never commit
-.env
-.env.*
+# ---------------------------------------------------------------------------
+# Repo-root ignore rules (see company/ai-footprint/engineering/ARCHITECTURE.md §6)
+# Rules are precise and root-anchored so they never swallow source, tests or
+# fixtures. Git cannot re-include a file whose parent directory is excluded,
+# so directory rules below are anchored with a leading "/".
+# ---------------------------------------------------------------------------
+
+# Secrets - never commit (precise, anchored)
+/.env
+/.env.*
+!/.env.example
+/secrets/
+/credentials
+/credentials.*
+!/credentials.schema.json
 *.pem
-*.key
 *.pfx
 *.p12
-secrets/
-credentials*
-*token*
-# Local logs / reports that may contain internal AD data
+*.key
+*.token
+*.secret
+
+# Legacy RC4 tool (Manage-KerberosEncryption.ps1) logs / CSV reports.
+# These may contain internal AD data.
 *.log
 *.csv
-# AuthShift outputs (may contain internal AD data)
+
+# AuthShift outputs (may contain internal AD data) - root only
+/reports/
+/journal/
+/snapshots/
 *.authshift.html
 *.authshift.json
-reports/
-journal/
-snapshots/
+
+# AI Stocktake scan outputs produced at the repo root
+/out/
+*.aistocktake.json
+*.aistocktake.html
+
+# AuthShift fixtures are fake by design
 !tests/Fixtures/*.json
+
+# AI Stocktake has its own ai-stocktake/.gitignore (it will become its own
+# repo). Never let the rules above ignore anything under it: source, tests
+# and tests/fixtures/** are always tracked. The nested ai-stocktake/.gitignore
+# still applies (deeper .gitignore files take precedence).
+!/ai-stocktake/**

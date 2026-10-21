@@ -1,0 +1,207 @@
+# AI Stocktake CI. Written with ai-stocktake/ as the repository root (it will
+# move to its own repo as-is). No secrets are needed; all jobs are read-only.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PESTER_MIN_VERSION: '5.5.0'
+
+jobs:
+  hygiene:
+    name: Repo hygiene (Hebrew, .gitignore)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Fail on Hebrew characters
+        shell: bash
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          if grep -rIlP '[\x{0590}-\x{05FF}\x{FB1D}-\x{FB4F}]' --exclude-dir=.git . ; then
+            echo "::error::Hebrew characters found in the files listed above. All content must be English only."
+            exit 1
+          fi
+          echo "No Hebrew characters found."
+
+      - name: Fail if .gitignore matches source or test files
+        shell: bash
+        run: |
+          # --no-index checks tracked files against the ignore patterns too.
+          candidates=$( { git ls-files; git ls-files --others --exclude-standard; } \
+            | grep -E '^(src|tests|\.github)/|^[^/]+\.(ps1|psm1|psd1|md|json)$|^LICENSE$' || true )
+          if [ -z "$candidates" ]; then
+            echo "No candidate files to check."
+            exit 0
+          fi
+          ignored=$(printf '%s\n' "$candidates" | git check-ignore --no-index --stdin || true)
+          if [ -n "$ignored" ]; then
+            echo "::error::.gitignore rules match source/test files:"
+            printf '%s\n' "$ignored" | git check-ignore --no-index -v --stdin || true
+            exit 1
+          fi
+          ignored_untracked=$(git ls-files --others --ignored --exclude-standard -- src tests .github)
+          if [ -n "$ignored_untracked" ]; then
+            echo "::error::Ignored files found under src/, tests/ or .github/:"
+            printf '%s\n' "$ignored_untracked"
+            exit 1
+          fi
+          echo ".gitignore does not hide any source or test file."
+
+  lint:
+    name: Lint (PSScriptAnalyzer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -Scope CurrentUser -Force
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Import-Module PSScriptAnalyzer
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          $results | Format-Table -AutoSize RuleName, Severity, ScriptName, Line, Message | Out-String -Width 4096
+          if ($results) {
+            Write-Error "PSScriptAnalyzer reported $(@($results).Count) issue(s)."
+            exit 1
+          }
+
+  test-linux:
+    name: Test (pwsh, Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion $env:PESTER_MIN_VERSION -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion $env:PESTER_MIN_VERSION
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Filter.ExcludeTag = @('WindowsOnly')
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'testResults.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-pwsh
+          path: testResults.xml
+          if-no-files-found: ignore
+
+  test-windows-ps51:
+    name: Test (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Pester
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion $env:PESTER_MIN_VERSION -Scope CurrentUser -Force -SkipPublisherCheck -AllowClobber
+
+      - name: Run Pester
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSVersionTable | Format-Table -AutoSize | Out-String | Write-Host
+          Import-Module Pester -MinimumVersion $env:PESTER_MIN_VERSION
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'testResults.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows-ps51
+          path: testResults.xml
+          if-no-files-found: ignore
+
+  test-windows-pwsh:
+    name: Test (pwsh, Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Pester
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion $env:PESTER_MIN_VERSION -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Pester
+        run: |
+          $PSVersionTable | Format-Table -AutoSize | Out-String | Write-Host
+          Import-Module Pester -MinimumVersion $env:PESTER_MIN_VERSION
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'testResults.xml'
+          Invoke-Pester -Configuration $config
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows-pwsh
+          path: testResults.xml
+          if-no-files-found: ignore

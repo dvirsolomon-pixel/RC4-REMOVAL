@@ -1,0 +1,36 @@
+# AI Stocktake ignore rules. Written so this folder can become its own repo
+# as-is. Rules are root-anchored ("/") or match only generated output names,
+# so they never touch src/, tests/ or tests/fixtures/**.
+
+# Scan outputs (JSON results and HTML reports)
+*.aistocktake.json
+*.aistocktake.html
+/out/
+/reports/
+/artifacts/
+
+# Test and lint outputs
+/testResults.xml
+/TestResults/
+/coverage.xml
+/*.sarif
+
+# Build output
+/build/
+/dist/
+/publish/
+
+# Local secrets / environment files (root only; fixtures use templates)
+/.env
+/.env.*
+!/.env.example
+
+# Editor / OS noise
+.vs/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Fixtures are fake by design and must always be tracked
+!/tests/fixtures/**
