@@ -11,3 +11,10 @@ credentials*
 # Local logs / reports that may contain internal AD data
 *.log
 *.csv
+# AuthShift outputs (may contain internal AD data)
+*.authshift.html
+*.authshift.json
+reports/
+journal/
+snapshots/
+!tests/Fixtures/*.json
