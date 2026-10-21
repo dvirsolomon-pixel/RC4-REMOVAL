@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KerbShift — Fix what broke after RC4 enforcement</title>
+<meta name="description" content="Free, open-source PowerShell kit to audit and safely fix RC4 Kerberos encryption in Active Directory after Microsoft's 2026 enforcement, with OS gate, read-back validation and rollback. NTLM and LDAP-signing readiness coming next.">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<meta property="og:title" content="KerbShift — Fix what broke after RC4 enforcement">
+<meta property="og:description" content="Audit → Safe fix → Rollback → Report. Free and open source for Active Directory admins and MSPs.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M9 22V10h3v5l5-5h4l-6 6 6 6h-4l-5-5v5z' fill='white'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --surface: #ffffff;
+    --text: #1f2328;
+    --muted: #57606a;
+    --border: #d0d7de;
+    --accent: #0a58ca;
+    --accent-text: #ffffff;
+    --accent-soft: #ddf4ff;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --code-bg: #eff2f5;
+    --shadow: 0 1px 3px rgba(31,35,40,.08);
+    --radius: 12px;
+    --maxw: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --bg-alt: #161b22;
+      --surface: #161b22;
+      --text: #e6edf3;
+      --muted: #9da7b3;
+      --border: #30363d;
+      --accent: #4493f8;
+      --accent-text: #0d1117;
+      --accent-soft: #1f2a3a;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --code-bg: #1f2630;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, .btn:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 6px;
+  }
+  code, kbd, pre { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size: .9em; }
+  code { background: var(--code-bg); padding: .1em .35em; border-radius: 5px; overflow-wrap: anywhere; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 10px; overflow-x: auto; margin: 0; border: 1px solid var(--border); }
+  pre code { background: none; padding: 0; }
+  .skip { position: absolute; left: -9999px; top: 0; background: var(--accent); color: var(--accent-text); padding: 8px 14px; z-index: 10; }
+  .skip:focus { left: 16px; top: 16px; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 16px; }
+  header.site { border-bottom: 1px solid var(--border); }
+  header.site .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; font-size: 1.1rem; }
+  .brand svg { flex: none; }
+  nav ul { list-style: none; display: flex; gap: 18px; margin: 0; padding: 0; flex-wrap: wrap; }
+  nav a { color: var(--muted); text-decoration: none; font-size: .95rem; }
+  nav a:hover { color: var(--text); text-decoration: underline; }
+  section { padding: 64px 0; }
+  section.alt { background: var(--bg-alt); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  h1, h2, h3 { line-height: 1.2; margin: 0 0 .5em; }
+  h1 { font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -.02em; }
+  h2 { font-size: clamp(1.5rem, 3.2vw, 2.1rem); letter-spacing: -.01em; }
+  h3 { font-size: 1.15rem; }
+  .eyebrow { display: inline-block; font-size: .85rem; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 12px; margin-bottom: 18px; }
+  .lead { font-size: 1.2rem; color: var(--muted); max-width: 46rem; }
+  .muted { color: var(--muted); }
+  .hero { padding: 72px 0 56px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 28px 0 12px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 18px;
+    border-radius: 10px; font-weight: 600; text-decoration: none; border: 1px solid var(--border);
+    color: var(--text); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn svg { flex: none; }
+  .note { font-size: .9rem; color: var(--muted); }
+  .grid { display: grid; gap: 18px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+  .card h3 { margin-top: 0; }
+  .symptom code { display: block; margin-top: 8px; padding: 8px 10px; }
+  ol.steps { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+  ol.steps > li { counter-increment: step; position: relative; padding-top: 44px; }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; top: 0; left: 0; width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 700; background: var(--accent); color: var(--accent-text);
+  }
+  .tag { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; vertical-align: middle; margin-left: 6px; white-space: nowrap; }
+  .tag.now { color: var(--ok); }
+  .tag.soon { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg-alt); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .price { font-size: 1.8rem; font-weight: 700; margin: 6px 0 2px; }
+  .price small { font-size: .95rem; font-weight: 500; color: var(--muted); }
+  .plan ul { padding-left: 1.2em; }
+  .plan.featured { border: 2px solid var(--accent); }
+  .plan .btn { margin-top: 12px; }
+  details { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 0 16px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 600; padding: 14px 0; min-height: 44px; }
+  details[open] summary { border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  details > *:last-child { margin-bottom: 14px; }
+  footer { padding: 36px 0 48px; border-top: 1px solid var(--border); font-size: .9rem; color: var(--muted); }
+  footer ul { list-style: none; padding: 0; margin: 0 0 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .final { text-align: center; }
+  .final .cta-row { justify-content: center; }
+  @media (max-width: 560px) {
+    section { padding: 48px 0; }
+    .hero { padding: 48px 0 40px; }
+    nav ul { gap: 14px; }
+    .btn { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="KerbShift home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1f6feb"/><path d="M9 22V10h3v5l5-5h4l-6 6 6 6h-4l-5-5v5z" fill="#fff"/></svg>
+      KerbShift
+    </a>
+    <nav aria-label="Primary">
+      <ul>
+        <li><a href="#problem">Problem</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#editions">Editions</a></li>
+        <li><a href="#faq">FAQ</a></li>
+        <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">GitHub</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <!-- HERO -->
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <span class="eyebrow">Free &amp; open source · Active Directory · PowerShell</span>
+      <h1 id="hero-title">Fix what broke after Microsoft's RC4 enforcement.<br>Get ready for NTLM deprecation.</h1>
+      <p class="lead">KerbShift finds the accounts still tied to RC4 in your Active Directory, moves them to AES <strong>safely</strong>, verifies every change, and rolls back in one step if something breaks. Built for MSP technicians and IT admins who can't afford a surprise outage.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+          Star on GitHub
+        </a>
+        <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/releases">
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14ZM7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/></svg>
+          Download the free tool
+        </a>
+        <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/discussions">
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M1.75 1h8.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 10.25 10H7.061l-2.574 2.573A1.458 1.458 0 0 1 2 11.543V10h-.25A1.75 1.75 0 0 1 0 8.25v-5.5C0 1.784.784 1 1.75 1ZM1.5 2.75v5.5c0 .138.112.25.25.25h1a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h3.5a.25.25 0 0 0 .25-.25v-5.5a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25Zm13 2a.25.25 0 0 0-.25-.25h-.5a.75.75 0 0 1 0-1.5h.5c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 14.25 12H14v1.543a1.458 1.458 0 0 1-2.487 1.03L9.22 12.28a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l2.22 2.22v-2.19a.75.75 0 0 1 .75-.75h1a.25.25 0 0 0 .25-.25Z"/></svg>
+          Join the discussion
+        </a>
+      </div>
+      <p class="note">MIT licensed. Runs locally on your DC or admin workstation. No telemetry, no sign-up, no data leaves your network.</p>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="alt" id="problem" aria-labelledby="problem-title">
+    <div class="wrap">
+      <h2 id="problem-title">The RC4 deadline already passed. The cleanup didn't.</h2>
+      <p class="lead">Microsoft made AES the Kerberos default for accounts without an explicit setting in April 2026, and removed the rollback switch in July 2026. NTLMv1 restrictions followed in October 2026, and network NTLM is planned to be off by default in the next major Windows Server release. If any of these look familiar, you're in the cleanup phase:</p>
+      <div class="grid g2" style="margin-top:28px">
+        <div class="card symptom">
+          <h3>Logons or services fail with KDC events 14 / 16</h3>
+          <p class="muted">The account has no AES keys because its password predates AES support.</p>
+          <code>The requested etypes were 18 17. The accounts available etypes were 23.</code>
+        </div>
+        <div class="card symptom">
+          <h3>KDCSVC events 201–209 on your DCs</h3>
+          <p class="muted">Audit and enforcement events from the CVE-2026-20833 rollout point at accounts and clients still asking for RC4.</p>
+          <code>Microsoft-Windows-Kerberos-Key-Distribution-Center · KDCSVC</code>
+        </div>
+        <div class="card symptom">
+          <h3>"Temporary" RC4 workarounds that became permanent</h3>
+          <p class="muted">Accounts set to explicit RC4 just to silence errors keep working and keep the risk. This is hidden <em>auth debt</em>.</p>
+          <code>msDS-SupportedEncryptionTypes = 4 or 28 (RC4 still allowed)</code>
+        </div>
+        <div class="card symptom">
+          <h3>NAS, Linux and Java apps stopped authenticating</h3>
+          <p class="muted">Appliances joined years ago with an empty encryption-type attribute or RC4-only keytabs.</p>
+          <code>4769 · Ticket Encryption Type 0x17 (RC4-HMAC)</code>
+        </div>
+      </div>
+      <p style="margin-top:24px">Free tools are good at <strong>finding</strong> these problems. Fixing them safely, with validation and rollback, has mostly been left to expensive enterprise platforms. KerbShift closes that gap.</p>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <h2 id="how-title">How it works</h2>
+      <p class="lead">Four steps, in the order that keeps production running.</p>
+      <ol class="steps grid g4" style="margin-top:32px">
+        <li class="card">
+          <h3>Audit</h3>
+          <p>List computer and user accounts with RC4 enabled or no encryption type set (the KDC treats null as RC4 risk). Export a CSV baseline with OS, last logon, SPNs and password age.</p>
+        </li>
+        <li class="card">
+          <h3>Safe fix</h3>
+          <p>Move one account, then many, to AES128 + AES256 (<code>24</code>). An OS gate refuses legacy systems that can't do AES, and unknown OS versions are skipped by default.</p>
+        </li>
+        <li class="card">
+          <h3>Rollback</h3>
+          <p>Something broke? Restore RC4 on that single account in one step while you fix the root cause, such as a password reset or keytab refresh.</p>
+        </li>
+        <li class="card">
+          <h3>Report</h3>
+          <p>Every write is read back from AD and logged with before / after / expected values. Re-export the CSV as evidence for your client, manager or auditor.</p>
+        </li>
+      </ol>
+
+      <h3 style="margin-top:44px">What it checks</h3>
+      <div class="table-wrap" role="region" aria-label="Coverage table" tabindex="0">
+        <table>
+          <caption class="muted" style="text-align:left;padding:12px 14px">Available today vs. on the public roadmap</caption>
+          <thead><tr><th scope="col">Area</th><th scope="col">Coverage</th><th scope="col">Status</th></tr></thead>
+          <tbody>
+            <tr><td>RC4 / AES on user &amp; computer accounts</td><td>Audit, single &amp; bulk fix, OS gate, read-back validation, rollback, CSV, logging</td><td><span class="tag now">Available</span></td></tr>
+            <tr><td>Hidden RC4 "auth debt"</td><td>Explicit RC4 workarounds, accounts without AES keys, domain-wide defaults, KDCSVC event summary</td><td><span class="tag soon">Planned</span></td></tr>
+            <tr><td>NTLM / NTLMv1 readiness</td><td>Read-only summary of NTLM audit events and NTLMv1 usage</td><td><span class="tag soon">Planned</span></td></tr>
+            <tr><td>LDAP signing &amp; channel binding</td><td>Read-only check of unsigned / unbound LDAP binds</td><td><span class="tag soon">Planned</span></td></tr>
+            <tr><td>Kerberos hygiene</td><td>Kerberoastable accounts, delegation, krbtgt password age</td><td><span class="tag soon">Planned</span></td></tr>
+            <tr><td>HTML / PDF report</td><td>Readiness score and staged remediation plan</td><td><span class="tag soon">Planned</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:44px">Quick start</h3>
+      <pre><code># Elevated PowerShell 5.1+ on a DC or a machine with RSAT (ActiveDirectory module)
+.\Manage-KerberosEncryption.ps1
+# 9 = enable logging  ·  10/11 = export baseline CSV  ·  3/4 = fix ONE test account first</code></pre>
+      <p class="note">Start with logging and a CSV baseline, fix a single test account, wait 24 hours, then go bulk. The full rollout guide is in the <a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL#recommended-rollout">README</a>.</p>
+    </div>
+  </section>
+
+  <!-- EDITIONS -->
+  <section class="alt" id="editions" aria-labelledby="editions-title">
+    <div class="wrap">
+      <h2 id="editions-title">Editions</h2>
+      <p class="lead">Community is free forever and open source. Pro and MSP are <strong>planned</strong>. Nothing is for sale yet, and planned prices may change.</p>
+      <div class="grid g3" style="margin-top:28px">
+        <article class="card plan featured" aria-labelledby="plan-community">
+          <h3 id="plan-community">Community <span class="tag now">Available</span></h3>
+          <p class="price">$0 <small>forever · MIT</small></p>
+          <ul>
+            <li>RC4 audit &amp; safe remediation</li>
+            <li>OS compatibility gate</li>
+            <li>AD read-back validation</li>
+            <li>One-step rollback</li>
+            <li>CSV reports &amp; structured logs</li>
+            <li>Upcoming free checks: hidden RC4 debt</li>
+          </ul>
+          <a class="btn primary" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/releases">Get it on GitHub</a>
+        </article>
+        <article class="card plan" aria-labelledby="plan-pro">
+          <h3 id="plan-pro">Pro <span class="tag soon">Coming soon</span></h3>
+          <p class="price">~$49 <small>/ month · planned</small></p>
+          <ul>
+            <li>Read-only scanner: RC4 + NTLM/NTLMv1 + LDAP signing + Kerberos hygiene</li>
+            <li>HTML / PDF readiness report</li>
+            <li>Staged remediation plan</li>
+          </ul>
+          <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/discussions">Tell us you're interested</a>
+        </article>
+        <article class="card plan" aria-labelledby="plan-msp">
+          <h3 id="plan-msp">MSP <span class="tag soon">Coming soon</span></h3>
+          <p class="price">~$149 <small>/ month · planned</small></p>
+          <ul>
+            <li>Multi-client workspaces</li>
+            <li>White-label reports for your customers</li>
+            <li>Flat per-client pricing</li>
+            <li>Device playbooks: NAS, Linux keytabs, SQL, ADFS, SAP</li>
+          </ul>
+          <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/discussions">Join the MSP waitlist</a>
+        </article>
+      </div>
+      <p class="note" style="margin-top:18px">The "waitlist" is GitHub-native: react 👍 on the pinned Pro/MSP discussion and click <strong>Watch → Custom → Releases</strong> on the repository. We don't collect emails.</p>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section id="trust" aria-labelledby="trust-title">
+    <div class="wrap">
+      <h2 id="trust-title">Built to be safe on a domain controller</h2>
+      <div class="grid g3" style="margin-top:24px">
+        <div class="card"><h3>Read the code</h3><p>A single PowerShell script, MIT licensed. Every AD write path is in plain sight on GitHub.</p></div>
+        <div class="card"><h3>Nothing phones home</h3><p>No telemetry, no cloud, no account. Output stays on your disk as CSV and log files.</p></div>
+        <div class="card"><h3>Skip rather than break</h3><p>Legacy or unknown operating systems are refused by default. Bulk actions show a per-account verification table.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="alt" id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <h2 id="faq-title">FAQ</h2>
+      <details>
+        <summary>Isn't it too late? Enforcement already happened.</summary>
+        <p>That's exactly why. Enforcement didn't remove RC4 everywhere. Explicit RC4 settings are still honored, and accounts without AES keys still fail. KerbShift helps you find and fix what's left, then prepares you for NTLM, which is next on the same path.</p>
+      </details>
+      <details>
+        <summary>Which value does it write?</summary>
+        <p><code>msDS-SupportedEncryptionTypes = 24</code> (AES128 + AES256). It's the safe universal target. <code>56</code> adds the AES256-SK bit and requires DCs patched in November 2022 or later; you can opt in by changing one variable.</p>
+      </details>
+      <details>
+        <summary>Does it touch krbtgt?</summary>
+        <p>No, intentionally. krbtgt encryption depends on its password state, not on this attribute. The README explains how to handle it: reset twice, at least 10 hours apart, after everything else is remediated.</p>
+      </details>
+      <details>
+        <summary>What do I need to run it?</summary>
+        <p>PowerShell 5.1+, the ActiveDirectory module (RSAT or a DC), and rights to modify <code>msDS-SupportedEncryptionTypes</code> on the target OUs.</p>
+      </details>
+      <details>
+        <summary>Can MSPs use the free edition for client work?</summary>
+        <p>Yes. Community is MIT licensed, so commercial use is allowed. The planned MSP edition adds multi-client management and white-label reporting on top.</p>
+      </details>
+      <details>
+        <summary>Is this affiliated with Microsoft?</summary>
+        <p>No. KerbShift is an independent open-source project. Microsoft, Windows and Active Directory are trademarks of Microsoft Corporation.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="final" aria-labelledby="final-title">
+    <div class="wrap">
+      <h2 id="final-title">Clean up RC4 now. Be ready when NTLM goes dark.</h2>
+      <p class="lead" style="margin:0 auto">Star the repo to follow along, watch Releases to hear about NTLM readiness first, and tell us in Discussions what broke for you.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">Star on GitHub</a>
+        <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL" aria-label="Watch for releases on GitHub (use Watch, then Custom, then Releases)">Watch for releases</a>
+        <a class="btn" href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/discussions">Open Discussions</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <ul>
+      <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL">Source code</a></li>
+      <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/releases">Releases</a></li>
+      <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/discussions">Discussions</a></li>
+      <li><a href="https://github.com/dvirsolomon-pixel/RC4-REMOVAL/issues">Report an issue</a></li>
+    </ul>
+    <p>KerbShift Community is free, open-source software (MIT) maintained by <a href="https://github.com/dvirsolomon-pixel">@dvirsolomon-pixel</a>. It modifies Active Directory and can break authentication if used carelessly. Follow the recommended rollout and test on single accounts first. Provided as is, without warranty.</p>
+    <p>This page uses no cookies, no trackers and no external scripts.</p>
+  </div>
+</footer>
+</body>
+</html>
