@@ -31,7 +31,7 @@
 - Dashboard סטטי ב-Cloudflare Pages: רשימת devices, findings לפי חומרה, ו-drill-down לכל תחנה.
 - Login דרך GitHub OAuth או magic link.
 - בצד ה-agent: הדגל `-Upload -EnrollmentToken`. בלי הדגל לא נשלח שום דבר.
-- Detections חדשים: AIF-SEC-002, AIF-PERM-003, ו-drift מקומי (AIF-MCP-005).
+- Detections חדשים: AIS-SEC-002, AIS-PERM-003, ו-drift מקומי (AIS-MCP-005).
 - Salt לכל tenant ל-fingerprints.
 
 **Exit criteria:**
@@ -46,7 +46,7 @@
 - GPO Startup Script ו-scheduled task יומי. דוגמה ל-RMM עבור MSPs.
 - חתימת קוד דרך SignPath Foundation, עם build ב-CI ציבורי. אם הבקשה לא תאושר בזמן: חתימה self-signed עם הוראות trust, וסימון ברור של המצב.
 - Drift alerts דרך webhook ל-Teams, Slack או email. זהו פיצ'ר Pro, אבל בלי גבייה.
-- AIF-MCP-006 (config hash).
+- AIS-MCP-006 (config hash).
 - Script read-only בסיסי ל-macOS.
 
 **Exit criteria:**
@@ -60,7 +60,7 @@
 - Policy engine: allowlist ו-denylist ל-MCP servers ולאפליקציות.
 - דוחות compliance: ISO 42001 evidence, EU AI Act inventory ושאלון ביטוח.
 - Multi-tenant ל-MSP.
-- AIF-ID-002 (קישור לקבוצות AD/Entra privileged).
+- AIS-ID-002 (קישור לקבוצות AD/Entra privileged).
 - macOS parity בסיסי.
 - Schema v1 יציב (מתחייבים לא לשבור עד v2).
 - קטלוג עם לפחות 60 כלים.

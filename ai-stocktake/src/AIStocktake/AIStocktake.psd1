@@ -1,4 +1,4 @@
-@{
+﻿@{
     RootModule           = 'AIStocktake.psm1'
     ModuleVersion        = '0.1.0'
     GUID                 = '33449cca-11e5-403a-9ecf-8a3653a64164'

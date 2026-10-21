@@ -1,4 +1,4 @@
-# Platform helpers. Windows PowerShell 5.1 has no $IsWindows/$IsLinux/$IsMacOS,
+﻿# Platform helpers. Windows PowerShell 5.1 has no $IsWindows/$IsLinux/$IsMacOS,
 # so detection goes through [Environment] and the PowerShell edition.
 
 function Get-AISPlatform {

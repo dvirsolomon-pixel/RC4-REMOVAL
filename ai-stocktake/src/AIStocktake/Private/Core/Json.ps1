@@ -1,4 +1,4 @@
-# JSON helpers that behave the same on Windows PowerShell 5.1 and PowerShell 7.
+﻿# JSON helpers that behave the same on Windows PowerShell 5.1 and PowerShell 7.
 #
 # Rules (see ARCHITECTURE.md section 4):
 # - ConvertTo-Json always gets -Depth 20 (the default of 2 silently truncates).
@@ -226,8 +226,8 @@ function ConvertTo-AISPlainData {
           avoiding the 5.1 "\/Date(...)\/" format.
         - Strings are unwrapped from any PSObject (5.1 would otherwise serialize
           extended properties such as PSPath).
-        - -StringTransform is applied to every string value (not to keys); it is
-          used by privacy mode.
+        - -PrivacyRules (from Get-AISPrivacyRule) are applied to every string
+          value (not to keys) in privacy mode.
     #>
     [CmdletBinding()]
     param(
@@ -235,7 +235,8 @@ function ConvertTo-AISPlainData {
         [AllowNull()]
         [object] $InputObject,
 
-        [scriptblock] $StringTransform,
+        [AllowNull()]
+        [object[]] $PrivacyRules,
 
         [int] $Depth = 0
     )
@@ -252,12 +253,12 @@ function ConvertTo-AISPlainData {
 
     if ($value -is [string]) {
         $s = [string]$value
-        if ($StringTransform) { $s = [string](& $StringTransform $s) }
+        if ($PrivacyRules) { $s = Protect-AISString -Text $s -Rules $PrivacyRules }
         return $s
     }
     if ($value -is [char] -or $value -is [guid] -or $value -is [enum] -or $value -is [version] -or $value -is [uri]) {
         $s = $value.ToString()
-        if ($StringTransform) { $s = [string](& $StringTransform $s) }
+        if ($PrivacyRules) { $s = Protect-AISString -Text $s -Rules $PrivacyRules }
         return $s
     }
     if ($value -is [bool]) { return [bool]$value }
@@ -280,7 +281,7 @@ function ConvertTo-AISPlainData {
             $keys = @($keys | Sort-Object -Property @{ Expression = { [string]$_ } })
         }
         foreach ($k in $keys) {
-            $out[[string]$k] = ConvertTo-AISPlainData -InputObject $value[$k] -StringTransform $StringTransform -Depth ($Depth + 1)
+            $out[[string]$k] = ConvertTo-AISPlainData -InputObject $value[$k] -PrivacyRules $PrivacyRules -Depth ($Depth + 1)
         }
         return $out
     }
@@ -288,7 +289,7 @@ function ConvertTo-AISPlainData {
     if ($value -is [System.Management.Automation.PSCustomObject]) {
         $out = [ordered]@{}
         foreach ($prop in $value.PSObject.Properties) {
-            $out[$prop.Name] = ConvertTo-AISPlainData -InputObject $prop.Value -StringTransform $StringTransform -Depth ($Depth + 1)
+            $out[$prop.Name] = ConvertTo-AISPlainData -InputObject $prop.Value -PrivacyRules $PrivacyRules -Depth ($Depth + 1)
         }
         return $out
     }
@@ -296,12 +297,12 @@ function ConvertTo-AISPlainData {
     if ($value -is [System.Collections.IEnumerable]) {
         $list = New-Object System.Collections.Generic.List[object]
         foreach ($element in $value) {
-            $list.Add((ConvertTo-AISPlainData -InputObject $element -StringTransform $StringTransform -Depth ($Depth + 1)))
+            $list.Add((ConvertTo-AISPlainData -InputObject $element -PrivacyRules $PrivacyRules -Depth ($Depth + 1)))
         }
         return , $list.ToArray()
     }
 
     $fallback = [string]$value
-    if ($StringTransform) { $fallback = [string](& $StringTransform $fallback) }
+    if ($PrivacyRules) { $fallback = Protect-AISString -Text $fallback -Rules $PrivacyRules }
     return $fallback
 }

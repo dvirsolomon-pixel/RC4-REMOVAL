@@ -1,0 +1,222 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:ai-stocktake:schema:scan-result:v1",
+  "title": "AI Stocktake scan result v1",
+  "description": "Output of Invoke-AISScan. Every object is closed (additionalProperties: false). No field may carry a secret value: secrets are reported as keyed fingerprints only. Minor versions add optional fields only; breaking changes require 2.0.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "scan", "device", "inventory", "findings", "secrets", "errors", "summary"],
+  "properties": {
+    "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+\\.[0-9]+$" },
+    "scan": { "$ref": "#/definitions/scan" },
+    "device": { "$ref": "#/definitions/device" },
+    "inventory": { "type": "array", "items": { "$ref": "#/definitions/inventoryItem" } },
+    "findings": { "type": "array", "items": { "$ref": "#/definitions/finding" } },
+    "secrets": { "type": "array", "items": { "$ref": "#/definitions/secret" } },
+    "errors": { "type": "array", "items": { "$ref": "#/definitions/error" } },
+    "summary": { "$ref": "#/definitions/summary" }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "nullableId": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
+    "toolId": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+    "path": { "type": ["string", "null"], "maxLength": 2048 },
+    "jsonPointer": { "type": ["string", "null"], "maxLength": 512 },
+    "ruleId": { "type": "string", "pattern": "^[A-Z]{2,5}-[A-Z0-9]{2,10}-[0-9]{3}$" },
+    "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+    "code": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{1,63}$" },
+    "timestamp": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,7})?Z$" },
+    "count": { "type": "integer", "minimum": 0 },
+
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startedAt", "durationMs", "agentVersion", "catalogVersion", "mode", "elevated", "privacyMode", "fixture", "collectors"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "startedAt": { "$ref": "#/definitions/timestamp" },
+        "durationMs": { "$ref": "#/definitions/count" },
+        "agentVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$" },
+        "catalogVersion": { "type": "string", "maxLength": 64 },
+        "mode": { "type": "string", "enum": ["user", "machine"] },
+        "elevated": { "type": "boolean" },
+        "privacyMode": { "type": "boolean" },
+        "fixture": { "type": "boolean", "description": "True when the scan ran against a fixture folder (-Root) instead of the real machine." },
+        "collectors": { "type": "array", "items": { "$ref": "#/definitions/collectorStatus" } }
+      }
+    },
+
+    "collectorStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "status", "durationMs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]{1,63}$" },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "status": { "type": "string", "enum": ["ok", "error", "skipped"] },
+        "durationMs": { "$ref": "#/definitions/count" },
+        "reason": { "type": ["string", "null"], "maxLength": 200 }
+      }
+    },
+
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "os", "powershell", "users"],
+      "properties": {
+        "hostname": { "type": "string", "maxLength": 256, "description": "Host name, or 'hmac:<16 hex>' in privacy mode." },
+        "os": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["family", "version"],
+          "properties": {
+            "family": { "type": "string", "enum": ["Windows", "Linux", "MacOS"] },
+            "version": { "type": "string", "maxLength": 64 }
+          }
+        },
+        "powershell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "edition"],
+          "properties": {
+            "version": { "type": "string", "maxLength": 64 },
+            "edition": { "type": "string", "maxLength": 32 }
+          }
+        },
+        "users": { "type": "array", "items": { "type": "string", "maxLength": 256 }, "description": "Scanned profile names, or pseudonyms in privacy mode." }
+      }
+    },
+
+    "inventoryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "toolId", "name", "version", "scope", "profile", "source", "path", "properties"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "kind": { "type": "string", "enum": ["app", "agent", "extension", "mcp-server", "runtime", "host"] },
+        "toolId": { "$ref": "#/definitions/toolId" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "version": { "type": ["string", "null"], "maxLength": 64 },
+        "scope": { "type": "string", "enum": ["user", "machine"] },
+        "profile": { "type": ["string", "null"], "maxLength": 256 },
+        "source": { "type": "string", "enum": ["registry", "file", "process", "port", "system"] },
+        "path": { "$ref": "#/definitions/path" },
+        "properties": { "$ref": "#/definitions/propertyBag" }
+      }
+    },
+
+    "propertyBag": {
+      "type": "object",
+      "description": "Small allowlisted facts. camelCase names; scalar values or arrays of scalars only; names that could carry a secret are forbidden (the factory compares them case-insensitively).",
+      "maxProperties": 50,
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]{0,63}$",
+        "not": {
+          "enum": ["value", "rawValue", "raw", "secret", "secrets", "password", "passwd", "pwd", "token", "accessToken", "refreshToken", "apiKey", "apikey", "key", "privateKey", "credential", "credentials", "authorization", "auth", "cookie", "connectionString", "env", "headers"]
+        }
+      },
+      "additionalProperties": {
+        "anyOf": [
+          { "$ref": "#/definitions/propertyScalar" },
+          { "type": "array", "maxItems": 100, "items": { "$ref": "#/definitions/propertyScalar" } }
+        ]
+      }
+    },
+    "propertyScalar": {
+      "anyOf": [
+        { "type": "string", "maxLength": 1024 },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
+    },
+
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ruleId", "category", "severity", "title", "toolId", "inventoryRef", "evidence", "remediation", "references"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "ruleId": { "$ref": "#/definitions/ruleId" },
+        "category": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$" },
+        "severity": { "$ref": "#/definitions/severity" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "toolId": { "$ref": "#/definitions/toolId" },
+        "inventoryRef": { "$ref": "#/definitions/nullableId" },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "jsonPointer", "detail"],
+          "properties": {
+            "path": { "$ref": "#/definitions/path" },
+            "jsonPointer": { "$ref": "#/definitions/jsonPointer" },
+            "detail": { "type": ["string", "null"], "maxLength": 1000, "description": "Human-readable context. Never a secret value or an unredacted command line." }
+          }
+        },
+        "remediation": { "type": ["string", "null"], "maxLength": 2000 },
+        "references": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 512 } }
+      }
+    },
+
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A detected secret, reported by keyed fingerprint only. There is deliberately no field for the value or any part of it.",
+      "required": ["id", "type", "fp", "ruleId", "location", "lengthBucket", "knownPrefix", "inventoryRef"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" },
+        "fp": { "type": "string", "pattern": "^hmac-sha256:[0-9a-f]{16}$" },
+        "ruleId": { "$ref": "#/definitions/ruleId" },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "jsonPointer"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "jsonPointer": { "$ref": "#/definitions/jsonPointer" }
+          }
+        },
+        "lengthBucket": { "type": "string", "enum": ["<20", "20-40", ">40"] },
+        "knownPrefix": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,16}$", "description": "Public prefix of the pattern only (for example ghp_), never characters of the secret part." },
+        "inventoryRef": { "$ref": "#/definitions/nullableId" }
+      }
+    },
+
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collector", "code", "message"],
+      "properties": {
+        "collector": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{1,63}$" },
+        "code": { "$ref": "#/definitions/code" },
+        "message": { "type": "string", "maxLength": 500 }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bySeverity", "inventory", "tools", "mcpServers", "secrets", "errors"],
+      "properties": {
+        "bySeverity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["info", "low", "medium", "high", "critical"],
+          "properties": {
+            "info": { "$ref": "#/definitions/count" },
+            "low": { "$ref": "#/definitions/count" },
+            "medium": { "$ref": "#/definitions/count" },
+            "high": { "$ref": "#/definitions/count" },
+            "critical": { "$ref": "#/definitions/count" }
+          }
+        },
+        "inventory": { "$ref": "#/definitions/count" },
+        "tools": { "$ref": "#/definitions/count" },
+        "mcpServers": { "$ref": "#/definitions/count" },
+        "secrets": { "$ref": "#/definitions/count" },
+        "errors": { "$ref": "#/definitions/count" }
+      }
+    }
+  }
+}

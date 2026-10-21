@@ -1,0 +1,4 @@
+[
+  { "LocalAddress": "127.0.0.1", "LocalPort": 11434, "ProcessId": 4242 },
+  { "LocalAddress": "0.0.0.0", "LocalPort": 1234, "ProcessId": 4242 }
+]

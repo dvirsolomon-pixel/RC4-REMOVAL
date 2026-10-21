@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # AIStocktake module loader.
 # Dot-sources every Private and Public script, except Private/Collectors:
 # collector files are discovered and loaded at scan time by Import-AISCollector

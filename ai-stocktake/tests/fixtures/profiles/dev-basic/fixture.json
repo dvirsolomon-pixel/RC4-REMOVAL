@@ -1,0 +1,8 @@
+{
+  "hostName": "FIXTURE-PC-01",
+  "userName": "alice",
+  "os": { "family": "Windows", "version": "10.0.26100" },
+  "powershell": { "version": "5.1.26100.1", "edition": "Desktop" },
+  "isElevated": false,
+  "now": "2026-10-21T08:00:00Z"
+}

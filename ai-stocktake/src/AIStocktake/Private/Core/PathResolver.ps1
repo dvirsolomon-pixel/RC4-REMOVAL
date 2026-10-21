@@ -1,4 +1,4 @@
-# Path templates and normalization.
+﻿# Path templates and normalization.
 #
 # Catalog entries and collectors describe locations as templates such as
 #   {AppData}\Claude\claude_desktop_config.json
